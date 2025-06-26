@@ -1,4 +1,4 @@
-ORG 0 ; ORIGIN
+ORG 0x7c00 ; ORIGIN
 BITS 16 ; 16 bit ISA
 
 ; Proxy (Fake) BIOS Parameter Block (BPB)
@@ -12,8 +12,8 @@ _start:
     times 33 db 0 ; 33 bytes fake data
 
 start:
-    ; Making 0x7c0 as code segment
-    jmp 0x7c0:step2
+    ; Making 0 as code segment
+    jmp 0:step2
 
 step2:
     cli ; Clears interrupts
@@ -22,37 +22,56 @@ step2:
     ; 16 bit segmentation
     ; 0x7c00 is the starting of the first segment
     ; Memory Loc = (Segment Register)*16 + Offset
-    mov ax, 0x7c0
+    mov ax, 0x00
     mov ds, ax ; Data Segment
     mov es, ax ; Extra Segment
-    mov ax, 0x00
-
     mov ss, ax ; Stack Segment
     mov sp, 0x7c00 ; Stack Pointer
     ; ----------------------------
 
     sti ; Enable interrupts
+.load_protected:
+    cli
+    lgdt[gdt_descriptor]
+    mov eax, cr0
+    or eax, 0x1
+    mov cr0, eax
 
-    ; CHS reading from emulated hard drive
-    mov ah, 02h ; Read sector command
-    mov al, 1 ; Number of sectors to read
-    mov ch, 0 ; Cylinder low eight bits
-    mov cl, 2 ; Read sector two
-    mov dh, 0 ; Head number
-    mov bx, buffer
-    int 0x13
-    jc error ; Jump carry
+; GDT (Global Descriptor Table)
 
-    mov si, buffer
-    call print
+; Reference for GDT
+; https://wiki.osdev.org/Global_Descriptor_Table
 
-    ; Infinite loop so that random memory is not read
-    jmp $
+gdt_start: ; Start label (for size)
 
-error:
-    mov si, error_message
-    call print
-    jmp $
+; 8 bytes of NULL Data (acc to GDT Specifications)
+gdt_null:
+    dd 0x0
+    dd 0x0
+
+; Offset 0x8
+gdt_code: ; CS SHOULD POINT TO THIS
+    dw 0xffff ; Segment limit first 0-15 bits
+    dw 0 ; Base first 0-15 bits
+    db 0 ; Base 16-23 bits
+    db 0x9a ; Access byte
+    db 11001111b ; High 4 bit flags and the low 4 bit flags
+    db 0 ; Base 24-31 Bits
+
+; Offset 0x10
+gdt_data: ; Data segment registers
+    dw 0xffff ; Segment limit first 0-15 bits
+    dw 0 ; Base first 0-15 bits
+    db 0 ; Base 16-23 bits
+    db 0x92 ; Access byte
+    db 11001111b ; High 4 bit flags and the low 4 bit flags
+    db 0 ; Base 24-31 Bits
+
+gdt_end: ; End label (for size)
+
+gdt_descriptor: ; Loading the Segment Descriptor
+    dw gdt_end - gdt_start - 1 ; size of the Segment Descriptor
+    dd gdt_start
 
 print:
     mov bx, 0
@@ -70,10 +89,6 @@ print_char:
     int 0x10
     ret
 
-error_message: db 'Failed to load sector', 0
-
 ; Filling the 512 bytes of bootloader with null bytes
 times 510-($ - $$) db 0 
 dw 0xAA55 ; Boot Signature (Little Endian)
-
-buffer:

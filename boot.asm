@@ -1,5 +1,5 @@
-ORG 0
-BITS 16
+ORG 0 ; ORIGIN
+BITS 16 ; 16 bit ISA
 
 ; Proxy (Fake) BIOS Parameter Block (BPB)
 ; Preventing BIOS from overriding code
@@ -12,7 +12,7 @@ _start:
     times 33 db 0 ; 33 bytes fake data
 
 start:
-    ; Making 0x7c0 code segment
+    ; Making 0x7c0 as code segment
     jmp 0x7c0:step2
 
 step2:
@@ -33,7 +33,24 @@ step2:
 
     sti ; Enable interrupts
 
-    mov si, message
+    ; CHS reading from emulated hard drive
+    mov ah, 02h ; Read sector command
+    mov al, 1 ; Number of sectors to read
+    mov ch, 0 ; Cylinder low eight bits
+    mov cl, 2 ; Read sector two
+    mov dh, 0 ; Head number
+    mov bx, buffer
+    int 0x13
+    jc error ; Jump carry
+
+    mov si, buffer
+    call print
+
+    ; Infinite loop so that random memory is not read
+    jmp $
+
+error:
+    mov si, error_message
     call print
     jmp $
 
@@ -53,7 +70,10 @@ print_char:
     int 0x10
     ret
 
-message: db 'Hello World!', 0
+error_message: db 'Failed to load sector', 0
 
-times 510-($ - $$) db 0
-dw 0xAA55
+; Filling the 512 bytes of bootloader with null bytes
+times 510-($ - $$) db 0 
+dw 0xAA55 ; Boot Signature (Little Endian)
+
+buffer:

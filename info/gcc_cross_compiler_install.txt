@@ -1,0 +1,19 @@
+https://wiki.osdev.org/GCC_Cross-Compiler
+
+Follow the steps here, but you will eventually realize that you will run into like a million different problems so here you go - research of 6 hrs to just install a cross compiler.
+
+Extracting and make instructions are same, follow the guide.
+
+Binutils config:
+
+../binutils-x.y.z/configure --target=i686-elf --prefix="$HOME/opt/cross" --with-sysroot --disable-nls --disable-werror --enable-64-bit-bfd --enable-targets=i686-elf --with-arch=i386 --with-cpu=i686
+
+GCC config:
+
+../gcc-x.y.z/configure --target=i686-elf --prefix="$HOME/opt/cross" --disable-nls --enable-languages=c,c++ --without-headers --with-as=/usr/bin/as --with-ld=/usr/bin/ld
+
+Don't run 
+> make all-target-libstdc++-v3
+> make install-target-libstdc++-v3
+
+use make [instruction] -j$(nproc) to speed things up

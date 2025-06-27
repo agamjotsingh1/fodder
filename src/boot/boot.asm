@@ -1,6 +1,9 @@
 ORG 0x7c00 ; ORIGIN
 BITS 16 ; 16 bit ISA
 
+CODE_SEG equ gdt_code - gdt_start ; 0x8 (Offset for code seg)
+DATA_SEG equ gdt_data - gdt_start ; 0x10 (Offset for data seg)
+
 ; Proxy (Fake) BIOS Parameter Block (BPB)
 ; Preventing BIOS from overriding code
 ; Total 33 bytes of fake data
@@ -30,12 +33,18 @@ step2:
     ; ----------------------------
 
     sti ; Enable interrupts
+
 .load_protected:
     cli
-    lgdt[gdt_descriptor]
+    lgdt[gdt_descriptor] ; Load GDT
+
+    ; Set the protected bit as high 
+    ; in Control Register 0
     mov eax, cr0
     or eax, 0x1
     mov cr0, eax
+
+    jmp CODE_SEG:load32 ; Jump to load32 (protected mode)
 
 ; GDT (Global Descriptor Table)
 
@@ -45,6 +54,7 @@ step2:
 gdt_start: ; Start label (for size)
 
 ; 8 bytes of NULL Data (acc to GDT Specifications)
+; Offset 0x0
 gdt_null:
     dd 0x0
     dd 0x0
@@ -73,21 +83,18 @@ gdt_descriptor: ; Loading the Segment Descriptor
     dw gdt_end - gdt_start - 1 ; size of the Segment Descriptor
     dd gdt_start
 
-print:
-    mov bx, 0
-.loop:
-    lodsb
-    cmp al, 0
-    je .done
-    call print_char
-    jmp .loop
-.done:
-    ret
-
-print_char:
-    mov ah, 0eh
-    int 0x10
-    ret
+; Load protected mode
+[BITS 32]
+load32:
+    mov ax, DATA_SEG
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+    mov ebp, 0x00200000 ; Base pointer
+    mov esp, ebp ; Stack pointer
+    jmp $
 
 ; Filling the 512 bytes of bootloader with null bytes
 times 510-($ - $$) db 0 

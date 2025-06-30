@@ -89,6 +89,7 @@ load32:
     mov ecx, 100 ; Total number of sectors to load
     mov edi, 0x0100000 ; (1 MB) Where the kernel code is loaded in memory
     call ata_lba_read
+    jmp CODE_SEG:0x0100000
 
 ; Driver for reading from disk without BIOS (not valid in protected mode)
 ata_lba_read:
@@ -99,6 +100,7 @@ ata_lba_read:
     ; Send the bits 24-27 of the lba to hard disk controller
     ; see osdev ata read write for clarity
     shr eax, 24 ; Shift Right 24 bits
+    or eax, 0XE0 ; Select the master drive (huh????)
     mov dx, 0x1F6
     out dx, al
     
@@ -139,7 +141,19 @@ ata_lba_read:
     test al, 8 ; the sector buffer requires servicing
     jz .try_again
 
-; Need to Read 256 words (512 bytes for 16 BIT ATA Standard)
+    ; Need to Read 256 words (512 bytes for 16 BIT ATA Standard)
+
+    mov ecx, 256 ; to read 256 words = 1 sector
+    mov dx, 0x1F0
+    rep insw ; Input word from port DX into EDI
+    ; 'insw' basically inputs from port DX
+    ; and then stores the values in memloc 'edi' i.e. the value in edi
+    ; 'rep' is to repeat it 256 times (ecx register specifies that)
+    ; 256 is number of words per sector and insw reads one word per sector
+
+    pop ecx
+    loop .next_sector
+    ret
 
 ; Filling the 512 bytes of bootloader with null bytes
 times 510-($ - $$) db 0 

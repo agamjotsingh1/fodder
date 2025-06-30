@@ -44,8 +44,7 @@ step2:
     or eax, 0x1
     mov cr0, eax
 
-    ; jmp CODE_SEG:load32 ; Jump to load32 (protected mode)
-    jmp $
+    jmp CODE_SEG:load32 ; Jump to load32 (protected mode)
 
 ; GDT (Global Descriptor Table)
 
@@ -83,6 +82,64 @@ gdt_end: ; End label (for size)
 gdt_descriptor: ; Loading the Segment Descriptor
     dw gdt_end - gdt_start - 1 ; size of the Segment Descriptor
     dd gdt_start
+
+[BITS 32]
+load32:
+    mov eax, 1 ; Starting Sector (0 is boot sector)
+    mov ecx, 100 ; Total number of sectors to load
+    mov edi, 0x0100000 ; (1 MB) Where the kernel code is loaded in memory
+    call ata_lba_read
+
+; Driver for reading from disk without BIOS (not valid in protected mode)
+ata_lba_read:
+    mov ebx, eax ; Backup the LBA
+    ; Using ATA LBA Ports we send
+    ; https://wiki.osdev.org/ATA_read/write_sectors#:~:text=rax%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20popfq%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20ret-,Read%20in%20LBA%20mode,-This%20page%20or
+
+    ; Send the bits 24-27 of the lba to hard disk controller
+    ; see osdev ata read write for clarity
+    shr eax, 24 ; Shift Right 24 bits
+    mov dx, 0x1F6
+    out dx, al
+    
+    ; Send the total sectors to read
+    mov eax, ecx
+    mov dx, 0x1F2
+    out dx, al
+
+    ; Send bits 0-7 of the LBA
+    mov eax, ebx ; Get the LBA back
+    mov dx, 0x1F3
+    out dx, al
+
+    ; Send bits 8-15 of the LBA
+    mov eax, ebx
+    shr eax, 8
+    mov dx, 0x1F4
+    out dx, al
+
+    ; Send bits 16-23 of the LBA
+    mov eax, ebx
+    shr eax, 16
+    mov dx, 0x1F5
+    out dx, al
+
+    mov dx, 0x1F7 ; Command port
+    mov al, 0x20 ; Read with retry.
+    out dx, al
+
+; Reading all sectors into memory
+.next_sector:
+    push ecx
+
+; Checking if we need to read
+.try_again:
+    mov dx, 0x1F7
+    in al, dx
+    test al, 8 ; the sector buffer requires servicing
+    jz .try_again
+
+; Need to Read 256 words (512 bytes for 16 BIT ATA Standard)
 
 ; Filling the 512 bytes of bootloader with null bytes
 times 510-($ - $$) db 0 
